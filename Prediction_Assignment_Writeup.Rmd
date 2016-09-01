@@ -1,0 +1,57 @@
+---
+title: "Predicting exercise type using personal activity data"
+author: "Greg Soertsz"
+date: "31 July 2016"
+output: html_document
+---
+
+```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+
+library(RCurl)
+library(caret)
+library(dplyr)
+
+readAndMaybeDownloadData <- function(remoteUrl, parentDirectory = getwd(), localFile, force=FALSE) {
+    localFilePath <- paste(parentDirectory, "data", localFile, sep="/")
+    parent = paste(parentDirectory, "data", sep="/")
+    if (file.exists(localFilePath)) {
+      if (force) {
+        unlink(parent, recursive=TRUE, force=TRUE);
+        dir.create(parent);
+        download.file(url = remoteUrl, destfile = localFilePath, method = "curl"); 
+      }
+    } else {
+      dir.create(parent);
+      download.file(url = remoteUrl, destfile = localFilePath, method = "curl"); 
+    }
+
+    read.csv(file = localFilePath, header = TRUE);
+}
+
+PARENT_DIRECTORY = "/Users/gsoertsz/Coursera/DataScience/PracticalMachineLearning/Assignments"
+
+raw_training <- readAndMaybeDownloadData("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", parentDirectory = PARENT_DIRECTORY, "pml-training.csv")
+raw_testing <- readAndMaybeDownloadData("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", parentDirectory = PARENT_DIRECTORY, "pml-testing.csv")
+
+
+relevantColumns <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window', 'roll_belt', 'pitch_belt', 'yaw_belt', 'total_accel_belt', 'gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z', 'accel_belt_x', 'accel_belt_y', 'accel_belt_z', 'magnet_belt_x', 'magnet_belt_y', 'magnet_belt_z', 'magnet_dumbbell_x', 'magnet_dumbbell_y', 'magnet_dumbbell_z', 'roll_forearm', 'pitch_forearm', 'yaw_forearm', 'total_accel_forearm', 'gyros_forearm_x', 'gyros_forearm_y', 'gyros_forearm_z', 'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z', 'magnet_forearm_x', 'magnet_forearm_y', 'magnet_forearm_z', 'classe')
+
+# remove timestamp and other meta columns
+relevantTrainingColumns <- relevantColumns[-c(1, 2, 3, 4, 5)]
+
+base_training <- mutate(raw_training[, relevantTrainingColumns], classe = as.factor(classe))
+
+set.seed(64533)
+inTrain <- createDataPartition(base_training$classe, p = 3/4)[[1]]
+training <- base_training[inTrain, ]
+cross_validation <- base_training[-inTrain, ]
+
+fit <- train(classe ~ ., data = training, method="rf")
+result <- predict(fit, new_data = cross_validation)
+
+c <- confusionMatrix(result, cross_validation$classe)
+```
+
+
+
+
