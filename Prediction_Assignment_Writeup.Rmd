@@ -12,6 +12,10 @@ library(caret)
 library(dplyr)
 library(pROC)
 library(xtable)
+
+library(GGally)
+library(gridExtra)
+
 ```
 
 ```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
@@ -47,22 +51,6 @@ relevantTrainingColumns <- relevantColumns[-c(1, 2, 3, 4, 5)]
 base_training <- mutate(raw_training[, relevantTrainingColumns], classe = as.factor(classe))
 ```
 
-```{r eval=FALSE, echo=FALSE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-set.seed(64533)
-inTrain <- createDataPartition(base_training$classe, p = 3/4)[[1]]
-training <- base_training[inTrain, ]
-cross_validation <- base_training[-inTrain, ]
-
-fit <- train(classe ~ ., data = training, method="rf")
-result <- predict(fit, newdata = cross_validation)
-
-c <- confusionMatrix(result, cross_validation$classe)
-
-print(xtable(c$table, auto=TRUE), type="html")
-# for the RoC
-```
-
-
 ```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 evaluate <- function(cross_validation, probs) {
   
@@ -91,60 +79,61 @@ evaluate <- function(cross_validation, probs) {
 }
 ```
 
+# Training the classifiers using three quarters of the training set
+
 ```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+set.seed(64433)
 inTrain <- createDataPartition(base_training$classe, p = 3/4)[[1]]
 training <- base_training[inTrain, ]
 cross_validation <- base_training[-inTrain, ]
 
-set.seed(64433)
 fit_lda_tq <- train(classe ~ ., data = training, method="lda")
 result_lda_tq.base <- predict(fit_lda_tq, newdata = cross_validation)
 result_lda_tq.probs <- predict(fit_lda_tq, newdata = cross_validation, type="prob")
 g_lda_tq <- evaluate(cross_validation, probs = result_lda_tq.probs)
 c_lda_tq <- confusionMatrix(result_lda_tq.base, cross_validation$classe)
-g_lda_tq
-
+#g_lda_tq
 
 fit_rf_tq <- train(classe ~ ., data = training, method="rf")
 result_rf_tq.base <- predict(fit_rf_tq, newdata = cross_validation)
 result_rf_tq.probs <- predict(fit_rf_tq, newdata = cross_validation, type="prob")
 g_rf_tq <- evaluate(cross_validation, probs = result_rf_tq.probs)
 c_rf_tq <- confusionMatrix(result_rf_tq.base, cross_validation$classe)
-g_rf_tq
+#g_rf_tq
+
+grid.arrange(g_lda_tq, g_rf_tq, ncol=2, nrow=1)
+
+```
+
+# Training classifiers using half the training set
+
+```{r eval=FALSE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+
+set.seed(64433)
+inTrain <- createDataPartition(base_training$classe, p = 1/2)[[1]]
+training <- base_training[inTrain, ]
+cross_validation <- base_training[-inTrain, ]
+
+fit_lda_half <- train(classe ~ ., data = training, method="lda")
+result_lda_half.base <- predict(fit_lda_half, newdata = cross_validation)
+result_lda_half.probs <- predict(fit_lda_half, newdata = cross_validation, type="prob")
+g_lda_half <- evaluate(cross_validation, probs = result_lda_half.probs)
+c_lda_half <- confusionMatrix(result_lda_half.base, cross_validation$classe)
+#g_lda_half
+
+
+fit_rf_half <- train(classe ~ ., data = training, method="rf")
+result_rf_half.base <- predict(fit_rf_half, newdata = cross_validation)
+result_rf_half.probs <- predict(fit_rf_half, newdata = cross_validation, type="prob")
+g_rf_half <- evaluate(cross_validation, probs = result_rf_half.probs)
+c_rf_half <- confusionMatrix(result_rf_half.base, cross_validation$classe)
+#g_rf_half
+
+grid.arrange(g_lda_tq, g_rf_tq, ncol=2, nrow=1)
 
 ```
 
 
-```{r eval=FALSE, echo=FALSE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-probs <- predict(fit, newdata = cross_validation, type="prob")
-roc_a <- roc(predictor=probs$A, response=cross_validation$classe)
-roc_b <- roc(predictor=probs$B, response=cross_validation$classe)
-roc_c <- roc(predictor=probs$C, response=cross_validation$classe)
-roc_d <- roc(predictor=probs$D, response=cross_validation$classe)
-roc_e <- roc(predictor=probs$E, response=cross_validation$classe)
-
-roc_viz_a <- data.frame(sensitivity = roc_a$sensitivities, specificity = roc_a$specificities)
-roc_viz_b <- data.frame(sensitivity = roc_b$sensitivities, specificity = roc_b$specificities)
-roc_viz_c <- data.frame(sensitivity = roc_c$sensitivities, specificity = roc_c$specificities)
-roc_viz_d <- data.frame(sensitivity = roc_d$sensitivities, specificity = roc_d$specificities)
-roc_viz_e <- data.frame(sensitivity = roc_e$sensitivities, specificity = roc_e$specificities)
-baseline <- data.frame(sensitivity = c(0.0, 1.0), specificity = c(0.0, 1.0))
-
-g <- ggplot() + geom_line(data = roc_viz_a, aes(x = 1 - specificity, y = sensitivity, color="red"))
-g <- g + geom_line(data = roc_viz_b, aes(x = 1 - specificity, y = sensitivity, color="blue"))
-g <- g + geom_line(data = roc_viz_c, aes(x = 1 - specificity, y = sensitivity, color="green"))
-g <- g + geom_line(data = roc_viz_d, aes(x = 1 - specificity, y = sensitivity, color="orange"))
-g <- g + geom_line(data = roc_viz_e, aes(x = 1 - specificity, y = sensitivity))
-g <- g + geom_line(data = baseline, aes(x = specificity, y = sensitivity), linetype="dotted")
-g <- g + annotate("text", x = 0.05, y = 0.95, label = "ROC Classe A")
-g <- g + annotate("text", x = 0.25, y = 0.95, label = "ROC Classe B")
-g <- g + annotate("text", x = 0.125, y = 0.75, label = "ROC Classe C")
-g <- g + annotate("text", x = 0.375, y = 0.60, label = "ROC Classe D")
-g <- g + annotate("text", x = 0.75, y = 0.90, label = "ROC Classe E")
-g <- g + ggtitle("Classe Classifier ROC Performance")
-g <- g + theme(legend.position="none")
-g
-```
 
 
 
