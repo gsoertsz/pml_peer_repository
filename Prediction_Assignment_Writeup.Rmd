@@ -7,14 +7,25 @@ output: html_document
 
 # Introduction
 
+This report outlines an exercise to train a classifier to predict the _type_ of exercise undertaken by a group of study participants based on data collected from a number of sensors positioned in various places on their body. Using data from the Human Activity Recognition study documented [here](http://groupware.les.inf.puc-rio.br/har), 
+
 # Executive Summary
 
-Using data from the Human Activity Recognition study, a classifier was trained to identify the type of activity given a number of input measures. The classifier was trained using a randomForest algorithm, using a resampling approach based on repeated cross validation based on training data of a chosen strata, and column projection.
+A classifier was trained to identify the type of activity given a number of input measures. A randomForest training algorithm was applied, using a resampling approach based on repeated cross validation based on training data of a chosen strata, and column projection.
 
-The trained models were evaluated using overall accuracy and ROC performance reflecting on Strong accuracy results were achieved for class A and B, with moderate-to-good accuracy results achieved for the other classes. 
+The trained models were evaluated using overall accuracy and ROC performance. Strong accuracy results were achieved for class A and B, with moderate-to-good accuracy results achieved for the other classes. Based on the overall accuracies, out-of-sample errors, and visualised ROC outputs, the training method can be summarized as follows:
 
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-
+* Random Forest training algorithm
+* Initial Training Strata = 7/8, specific columns selected (excluded time-based columns)
+* Resampling
+  * Repeated cross validation
+  * 5 folds
+  * 1 Repeat
+* Evaluation
+  * AUC accuracy = 0.995
+  * Out of sample error estimate = 0.4%
+  
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 library(RCurl)
 library(e1071)
 library(randomForest)
@@ -25,11 +36,9 @@ library(xtable)
 
 library(GGally)
 library(gridExtra)
-
-
 ```
 
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 
 readAndMaybeDownloadData <- function(remoteUrl, parentDirectory = getwd(), localFile, force=FALSE) {
     localFilePath <- paste(parentDirectory, "data", localFile, sep="/")
@@ -52,7 +61,13 @@ PARENT_DIRECTORY = "/Users/gsoertsz/Coursera/DataScience/PracticalMachineLearnin
 
 raw_training <- readAndMaybeDownloadData("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", parentDirectory = PARENT_DIRECTORY, "pml-training.csv")
 raw_testing <- readAndMaybeDownloadData("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", parentDirectory = PARENT_DIRECTORY, "pml-testing.csv")
+```
 
+# Selecting columns
+
+Upon initial inspection of the training data, a specific subset of the columns should be used, to avoid empty or NULL values, or summary (duplicated) data.
+
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 
 relevantColumns <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window', 'roll_belt', 'pitch_belt', 'yaw_belt', 'total_accel_belt', 'gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z', 'accel_belt_x', 'accel_belt_y', 'accel_belt_z', 'magnet_belt_x', 'magnet_belt_y', 'magnet_belt_z', 'magnet_dumbbell_x', 'magnet_dumbbell_y', 'magnet_dumbbell_z', 'roll_forearm', 'pitch_forearm', 'yaw_forearm', 'total_accel_forearm', 'gyros_forearm_x', 'gyros_forearm_y', 'gyros_forearm_z', 'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z', 'magnet_forearm_x', 'magnet_forearm_y', 'magnet_forearm_z', 'classe')
 
@@ -62,7 +77,7 @@ relevantTrainingColumns <- relevantColumns[-c(1, 2, 3, 4, 5)]
 base_training <- mutate(raw_training[, relevantTrainingColumns], classe = as.factor(classe))
 ```
 
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 evaluate <- function(cross_validation, probs) {
   
   roc_a <- roc(predictor=probs$A, response=cross_validation$classe)
@@ -139,9 +154,7 @@ multiClassSummary <- cmpfun(function (data, lev = NULL, model = NULL){
 })
 ```
 
-# Training the classifiers using three quarters of the training set
-
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 set.seed(64433)
 
 inTrain <- createDataPartition(base_training$classe, p = 3/4)[[1]]
@@ -149,27 +162,7 @@ training <- base_training[inTrain, ]
 cross_validation <- base_training[-inTrain, ]
 ```
 
-```{r eval=FALSE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-print.xtable(xtable(c_rf_tq), type="html")
-```
-
-# Training classifiers using cross validation
-
-```{r eval=FALSE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-set.seed(1234)
-train_control <- trainControl(method="repeatedcv", number=5, repeats=2)
-fit_rf <- train(classe ~ ., data = training, trControl=train_control, method="rf")
-result_rf.probs <- predict(fit_rf, newdata=cross_validation, type="prob")
-result_rf.base <- predict(fit_rf, newdata = cross_validation, type="raw")
-g_rf <- evaluate(cross_validation, probs=result_rf.probs)
-g_rf
-
-c_rf <- confusionMatrix(result_rf.base, cross_validation$classe)
-
-c_acc <- c_rf$overall[[1]]
-```
-
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 set.seed(33434)
 
 inTrain1 <- createDataPartition(base_training$classe, p = 1/2)[[1]]
@@ -191,44 +184,44 @@ cross_validation4 <- base_training[-inTrain4, ]
 tc <- trainControl(method="repeatedcv", number=5, repeats=1, classProbs=TRUE, summaryFunction=multiClassSummary)
 ```
 
-```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf1 <- train(classe ~ ., data = training1, trControl=tc, method="rf", metric="ROC")
 result_rf.1.probs <- predict(fit_rf1, newdata=cross_validation1, type="prob")
 result_rf.1.base <- predict(fit_rf1, newdata=cross_validation1, type="raw")
 g.rf.1 <- evaluate(cross_validation1, probs=result_rf.1.probs)
 c.rf.1 <- confusionMatrix(result_rf.1.base, cross_validation1$classe)
 c.acc.1 <- c.rf.1$overall[[1]]
-#g.rf.1
+ooe.1 <- tail(data.frame(fit_rf1$finalModel$err.rate), 1)$OOB
 ```
 
-```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf2 <- train(classe ~ ., data = training2, trControl=tc, method="rf", metric="ROC")
 result_rf.2.probs <- predict(fit_rf2, newdata=cross_validation2, type="prob")
 result_rf.2.base <- predict(fit_rf2, newdata=cross_validation2, type="raw")
 g.rf.2 <- evaluate(cross_validation2, probs=result_rf.2.probs)
 c.rf.2 <- confusionMatrix(result_rf.2.base, cross_validation2$classe)
 c.acc.2 <- c.rf.2$overall[[1]]
-#g.rf.2
+ooe.2 <- tail(data.frame(fit_rf2$finalModel$err.rate), 1)$OOB
 ```
 
-```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf3 <- train(classe ~ ., data = training3, trControl=tc, method="rf", metric="ROC")
 result_rf.3.probs <- predict(fit_rf3, newdata=cross_validation3, type="prob")
 result_rf.3.base <- predict(fit_rf3, newdata=cross_validation3, type="raw")
 g.rf.3 <- evaluate(cross_validation3, probs=result_rf.3.probs)
 c.rf.3 <- confusionMatrix(result_rf.3.base, cross_validation3$classe)
 c.acc.3 <- c.rf.3$overall[[1]]
-#g.rf.3
+ooe.3 <- tail(data.frame(fit_rf3$finalModel$err.rate), 1)$OOB
 ```
 
-```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf4 <- train(classe ~ ., data = training4, trControl=tc, method="rf", metric="ROC")
 result_rf.4.probs <- predict(fit_rf4, newdata=cross_validation4, type="prob")
 result_rf.4.base <- predict(fit_rf4, newdata=cross_validation4, type="raw")
 g.rf.4 <- evaluate(cross_validation4, probs=result_rf.4.probs)
 c.rf.4 <- confusionMatrix(result_rf.4.base, cross_validation4$classe)
 c.acc.4 <- c.rf.4$overall[[1]]
-#g.rf.4
+ooe.4 <- tail(data.frame(fit_rf4$finalModel$err.rate), 1)$OOB
 ```
 
 ```{r eval=F, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
@@ -246,8 +239,9 @@ strata <- c(1/2, 3/4, 7/8, 15/16)
 folds <- c(5, 5, 5, 5)
 repeats <- c(1, 1, 1, 1)
 accuracies <- c(c.acc.1, c.acc.2, c.acc.3, c.acc.4)
+oob <- c(ooe.1, ooe.2, ooe.3, ooe.4)
 
-acc <- data.frame(Strata = strata, Accuracy = accuracies)
+acc <- data.frame(Strata = strata, Accuracy = accuracies, OOB = oob)
 
 print.xtable(xtable(acc), type="html")
 ```

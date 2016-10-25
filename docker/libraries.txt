@@ -1,0 +1,10 @@
+devtools
+RCurl
+e1071
+randomForest
+caret
+dplyr
+pROC
+xtable
+GGally
+gridExtra
