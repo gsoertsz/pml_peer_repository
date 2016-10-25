@@ -1,13 +1,23 @@
 ---
 title: "Predicting exercise type using personal activity data"
 author: "Greg Soertsz"
-date: "31 July 2016"
+date: "26-10-2016"
 output: html_document
 ---
+
+# Introduction
+
+# Executive Summary
+
+Using data from the Human Activity Recognition study, a classifier was trained to identify the type of activity given a number of input measures. The classifier was trained using a randomForest algorithm, using a resampling approach based on repeated cross validation based on training data of a chosen strata, and column projection.
+
+The trained models were evaluated using overall accuracy and ROC performance reflecting on Strong accuracy results were achieved for class A and B, with moderate-to-good accuracy results achieved for the other classes. 
 
 ```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 
 library(RCurl)
+library(e1071)
+library(randomForest)
 library(caret)
 library(dplyr)
 library(pROC)
@@ -15,6 +25,7 @@ library(xtable)
 
 library(GGally)
 library(gridExtra)
+
 
 ```
 
@@ -58,8 +69,7 @@ evaluate <- function(cross_validation, probs) {
   roc_b <- roc(predictor=probs$B, response=cross_validation$classe)
   roc_c <- roc(predictor=probs$C, response=cross_validation$classe)
   roc_d <- roc(predictor=probs$D, response=cross_validation$classe)
-  roc_e <- roc(predictor=probs$E, response=cross_validation$classe)
-
+  roc_e <- roc(predictor=probs$E, response=cross_validation$classe) 
   roc_viz_a <- data.frame(sensitivity = roc_a$sensitivities, specificity = roc_a$specificities)
   roc_viz_b <- data.frame(sensitivity = roc_b$sensitivities, specificity = roc_b$specificities)
   roc_viz_c <- data.frame(sensitivity = roc_c$sensitivities, specificity = roc_c$specificities)
@@ -77,64 +87,169 @@ evaluate <- function(cross_validation, probs) {
   g <- g + theme(legend.position="none")
   g
 }
+
+require(compiler)
+multiClassSummary <- cmpfun(function (data, lev = NULL, model = NULL){
+  
+  #Load Libraries
+  require(Metrics)
+  require(caret)
+  
+  #Check data
+  if (!all(levels(data[, "pred"]) == levels(data[, "obs"]))) 
+    stop("levels of observed and predicted data do not match")
+  
+  #Calculate custom one-vs-all stats for each class
+  prob_stats <- lapply(levels(data[, "pred"]), function(class){
+    
+    #Grab one-vs-all data for the class
+    pred <- ifelse(data[, "pred"] == class, 1, 0)
+    obs  <- ifelse(data[,  "obs"] == class, 1, 0)
+    prob <- data[,class]
+
+    #Calculate one-vs-all AUC and logLoss and return
+    cap_prob <- pmin(pmax(prob, .000001), .999999)
+    prob_stats <- c(auc(obs, prob), logLoss(obs, cap_prob))
+    names(prob_stats) <- c('ROC', 'logLoss')
+    return(prob_stats) 
+  })
+  prob_stats <- do.call(rbind, prob_stats)
+  rownames(prob_stats) <- paste('Class:', levels(data[, "pred"]))
+  
+  #Calculate confusion matrix-based statistics
+  CM <- confusionMatrix(data[, "pred"], data[, "obs"])
+  
+  #Aggregate and average class-wise stats
+  #Todo: add weights
+  class_stats <- cbind(CM$byClass, prob_stats)
+  class_stats <- colMeans(class_stats)
+
+  #Aggregate overall stats
+  overall_stats <- c(CM$overall)
+ 
+  #Combine overall with class-wise stats and remove some stats we don't want 
+  stats <- c(overall_stats, class_stats)
+  stats <- stats[! names(stats) %in% c('AccuracyNull', 
+    'Prevalence', 'Detection Prevalence')]
+  
+  #Clean names and return
+  names(stats) <- gsub('[[:blank:]]+', '_', names(stats))
+  return(stats)
+  
+})
 ```
 
 # Training the classifiers using three quarters of the training set
 
 ```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 set.seed(64433)
+
 inTrain <- createDataPartition(base_training$classe, p = 3/4)[[1]]
 training <- base_training[inTrain, ]
 cross_validation <- base_training[-inTrain, ]
-
-fit_lda_tq <- train(classe ~ ., data = training, method="lda")
-result_lda_tq.base <- predict(fit_lda_tq, newdata = cross_validation)
-result_lda_tq.probs <- predict(fit_lda_tq, newdata = cross_validation, type="prob")
-g_lda_tq <- evaluate(cross_validation, probs = result_lda_tq.probs)
-c_lda_tq <- confusionMatrix(result_lda_tq.base, cross_validation$classe)
-#g_lda_tq
-
-fit_rf_tq <- train(classe ~ ., data = training, method="rf")
-result_rf_tq.base <- predict(fit_rf_tq, newdata = cross_validation)
-result_rf_tq.probs <- predict(fit_rf_tq, newdata = cross_validation, type="prob")
-g_rf_tq <- evaluate(cross_validation, probs = result_rf_tq.probs)
-c_rf_tq <- confusionMatrix(result_rf_tq.base, cross_validation$classe)
-#g_rf_tq
-
-grid.arrange(g_lda_tq, g_rf_tq, ncol=2, nrow=1)
-
 ```
-
-# Training classifiers using half the training set
 
 ```{r eval=FALSE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-
-set.seed(64433)
-inTrain <- createDataPartition(base_training$classe, p = 1/2)[[1]]
-training <- base_training[inTrain, ]
-cross_validation <- base_training[-inTrain, ]
-
-fit_lda_half <- train(classe ~ ., data = training, method="lda")
-result_lda_half.base <- predict(fit_lda_half, newdata = cross_validation)
-result_lda_half.probs <- predict(fit_lda_half, newdata = cross_validation, type="prob")
-g_lda_half <- evaluate(cross_validation, probs = result_lda_half.probs)
-c_lda_half <- confusionMatrix(result_lda_half.base, cross_validation$classe)
-#g_lda_half
-
-
-fit_rf_half <- train(classe ~ ., data = training, method="rf")
-result_rf_half.base <- predict(fit_rf_half, newdata = cross_validation)
-result_rf_half.probs <- predict(fit_rf_half, newdata = cross_validation, type="prob")
-g_rf_half <- evaluate(cross_validation, probs = result_rf_half.probs)
-c_rf_half <- confusionMatrix(result_rf_half.base, cross_validation$classe)
-#g_rf_half
-
-grid.arrange(g_lda_tq, g_rf_tq, ncol=2, nrow=1)
-
+print.xtable(xtable(c_rf_tq), type="html")
 ```
 
+# Training classifiers using cross validation
 
+```{r eval=FALSE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+set.seed(1234)
+train_control <- trainControl(method="repeatedcv", number=5, repeats=2)
+fit_rf <- train(classe ~ ., data = training, trControl=train_control, method="rf")
+result_rf.probs <- predict(fit_rf, newdata=cross_validation, type="prob")
+result_rf.base <- predict(fit_rf, newdata = cross_validation, type="raw")
+g_rf <- evaluate(cross_validation, probs=result_rf.probs)
+g_rf
 
+c_rf <- confusionMatrix(result_rf.base, cross_validation$classe)
 
+c_acc <- c_rf$overall[[1]]
+```
+
+```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+set.seed(33434)
+
+inTrain1 <- createDataPartition(base_training$classe, p = 1/2)[[1]]
+training1 <- base_training[inTrain1, ]
+cross_validation1 <- base_training[-inTrain1, ]
+
+inTrain2 <- createDataPartition(base_training$classe, p = 3/4)[[1]]
+training2 <- base_training[inTrain2, ]
+cross_validation2 <- base_training[-inTrain2, ]
+
+inTrain3 <- createDataPartition(base_training$classe, p = 7/8)[[1]]
+training3 <- base_training[inTrain3, ]
+cross_validation3 <- base_training[-inTrain3, ]
+
+inTrain4 <- createDataPartition(base_training$classe, p = 15/16)[[1]]
+training4 <- base_training[inTrain4, ]
+cross_validation4 <- base_training[-inTrain4, ]
+
+tc <- trainControl(method="repeatedcv", number=5, repeats=1, classProbs=TRUE, summaryFunction=multiClassSummary)
+```
+
+```{r eval=TRUE, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+fit_rf1 <- train(classe ~ ., data = training1, trControl=tc, method="rf", metric="ROC")
+result_rf.1.probs <- predict(fit_rf1, newdata=cross_validation1, type="prob")
+result_rf.1.base <- predict(fit_rf1, newdata=cross_validation1, type="raw")
+g.rf.1 <- evaluate(cross_validation1, probs=result_rf.1.probs)
+c.rf.1 <- confusionMatrix(result_rf.1.base, cross_validation1$classe)
+c.acc.1 <- c.rf.1$overall[[1]]
+#g.rf.1
+```
+
+```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+fit_rf2 <- train(classe ~ ., data = training2, trControl=tc, method="rf", metric="ROC")
+result_rf.2.probs <- predict(fit_rf2, newdata=cross_validation2, type="prob")
+result_rf.2.base <- predict(fit_rf2, newdata=cross_validation2, type="raw")
+g.rf.2 <- evaluate(cross_validation2, probs=result_rf.2.probs)
+c.rf.2 <- confusionMatrix(result_rf.2.base, cross_validation2$classe)
+c.acc.2 <- c.rf.2$overall[[1]]
+#g.rf.2
+```
+
+```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+fit_rf3 <- train(classe ~ ., data = training3, trControl=tc, method="rf", metric="ROC")
+result_rf.3.probs <- predict(fit_rf3, newdata=cross_validation3, type="prob")
+result_rf.3.base <- predict(fit_rf3, newdata=cross_validation3, type="raw")
+g.rf.3 <- evaluate(cross_validation3, probs=result_rf.3.probs)
+c.rf.3 <- confusionMatrix(result_rf.3.base, cross_validation3$classe)
+c.acc.3 <- c.rf.3$overall[[1]]
+#g.rf.3
+```
+
+```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+fit_rf4 <- train(classe ~ ., data = training4, trControl=tc, method="rf", metric="ROC")
+result_rf.4.probs <- predict(fit_rf4, newdata=cross_validation4, type="prob")
+result_rf.4.base <- predict(fit_rf4, newdata=cross_validation4, type="raw")
+g.rf.4 <- evaluate(cross_validation4, probs=result_rf.4.probs)
+c.rf.4 <- confusionMatrix(result_rf.4.base, cross_validation4$classe)
+c.acc.4 <- c.rf.4$overall[[1]]
+#g.rf.4
+```
+
+```{r eval=F, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+grid.arrange(g.rf.1, ncol=2, nrow=2)
+```
+
+```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+grid.arrange(g.rf.1, g.rf.2, g.rf.3, g.rf.4, ncol=2, nrow=2)
+
+bwplot(resamples(list(RF1 = fit_rf1, RF2 = fit_rf2, RF3 = fit_rf3, RF4 = fit_rf4)), metric=c("ROC", "Specificity", "Sensitivity"))
+```
+
+```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+strata <- c(1/2, 3/4, 7/8, 15/16)
+folds <- c(5, 5, 5, 5)
+repeats <- c(1, 1, 1, 1)
+accuracies <- c(c.acc.1, c.acc.2, c.acc.3, c.acc.4)
+
+acc <- data.frame(Strata = strata, Accuracy = accuracies)
+
+print.xtable(xtable(acc), type="html")
+```
 
 
