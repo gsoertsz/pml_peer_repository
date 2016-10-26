@@ -188,7 +188,7 @@ cross_validation4 <- base_training[-inTrain4, ]
 tc <- trainControl(method="repeatedcv", number=5, repeats=1, classProbs=TRUE, summaryFunction=multiClassSummary)
 ```
 
-```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf1 <- train(classe ~ ., data = training1, trControl=tc, method="rf", metric="ROC")
 result_rf.1.probs <- predict(fit_rf1, newdata=cross_validation1, type="prob")
 result_rf.1.base <- predict(fit_rf1, newdata=cross_validation1, type="raw")
@@ -198,7 +198,7 @@ c.acc.1 <- c.rf.1$overall[[1]]
 ooe.1 <- tail(data.frame(fit_rf1$finalModel$err.rate), 1)$OOB
 ```
 
-```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf2 <- train(classe ~ ., data = training2, trControl=tc, method="rf", metric="ROC")
 result_rf.2.probs <- predict(fit_rf2, newdata=cross_validation2, type="prob")
 result_rf.2.base <- predict(fit_rf2, newdata=cross_validation2, type="raw")
@@ -216,9 +216,11 @@ g.rf.3 <- evaluate(cross_validation3, probs=result_rf.3.probs, title="ROC: 87.5%
 c.rf.3 <- confusionMatrix(result_rf.3.base, cross_validation3$classe)
 c.acc.3 <- c.rf.3$overall[[1]]
 ooe.3 <- tail(data.frame(fit_rf3$finalModel$err.rate), 1)$OOB
+
+testing_predictions <- predict(fit_rf3, newdata = raw_testing, type="raw")
 ```
 
-```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 fit_rf4 <- train(classe ~ ., data = training4, trControl=tc, method="rf", metric="ROC")
 result_rf.4.probs <- predict(fit_rf4, newdata=cross_validation4, type="prob")
 result_rf.4.base <- predict(fit_rf4, newdata=cross_validation4, type="raw")
@@ -236,7 +238,7 @@ grid.arrange(g.rf.1, ncol=2, nrow=2)
 
 Below is the ROC output plots for each of the attempted training data strata
 
-```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 grid.arrange(g.rf.1, g.rf.2, g.rf.3, g.rf.4, ncol=2, nrow=2)
 ```
 
@@ -244,7 +246,7 @@ grid.arrange(g.rf.1, g.rf.2, g.rf.3, g.rf.4, ncol=2, nrow=2)
 
 The below box and whisker plots showing ROC, Specificity and Sensitivity respectively
 
-```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 bwplot(resamples(list(RF1_50 = fit_rf1, RF2_75 = fit_rf2, RF3_875 = fit_rf3, RF4_9375 = fit_rf4)), metric=c("ROC", "Specificity", "Sensitivity"))
 ```
 
@@ -252,7 +254,7 @@ bwplot(resamples(list(RF1_50 = fit_rf1, RF2_75 = fit_rf2, RF3_875 = fit_rf3, RF4
 
 Below is a summary of the performance characteristics of each trained model
 
-```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 strata <- c(1/2, 3/4, 7/8, 15/16)
 folds <- c(5, 5, 5, 5)
 repeats <- c(1, 1, 1, 1)
