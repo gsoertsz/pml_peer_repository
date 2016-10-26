@@ -7,7 +7,7 @@ output: html_document
 
 # Introduction
 
-This report outlines an exercise to train a classifier to predict the _type_ of exercise undertaken by a group of study participants based on data collected from a number of sensors positioned in various places on their body. Using data from the Human Activity Recognition study documented [here](http://groupware.les.inf.puc-rio.br/har), 
+This report outlines an exercise to train a classifier to predict the _type_ of exercise undertaken by a group of study participants based on data collected from a number of sensors positioned in various places on their body. Using data from the Human Activity Recognition study documented [here](http://groupware.les.inf.puc-rio.br/har), this exercise seeks to identify an appropriate training approach to achieve a best performing model to classify new inputs.
 
 # Executive Summary
 
@@ -16,14 +16,14 @@ A classifier was trained to identify the type of activity given a number of inpu
 The trained models were evaluated using overall accuracy and ROC performance. Strong accuracy results were achieved for class A and B, with moderate-to-good accuracy results achieved for the other classes. Based on the overall accuracies, out-of-sample errors, and visualised ROC outputs, the training method can be summarized as follows:
 
 * Random Forest training algorithm
-* Initial Training Strata = 7/8, specific columns selected (excluded time-based columns)
+* Initial Training Strata = 7/8 (87.5%), specific columns selected (excluded time-based columns)
 * Resampling
-  * Repeated cross validation
-  * 5 folds
-  * 1 Repeat
+    * Repeated cross validation
+        * 5 folds
+        * 1 Repeat
 * Evaluation
-  * AUC accuracy = 0.995
-  * Out of sample error estimate = 0.4%
+    * AUC accuracy = 0.995
+    * Out of sample error estimate = 0.4%
   
 ```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 library(RCurl)
@@ -33,9 +33,12 @@ library(caret)
 library(dplyr)
 library(pROC)
 library(xtable)
-
+library(devtools)
 library(GGally)
 library(gridExtra)
+library(compiler)
+library(Metrics)
+
 ```
 
 ```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
@@ -67,6 +70,8 @@ raw_testing <- readAndMaybeDownloadData("https://d396qusza40orc.cloudfront.net/p
 
 Upon initial inspection of the training data, a specific subset of the columns should be used, to avoid empty or NULL values, or summary (duplicated) data.
 
+Below is a list of columns used:
+
 ```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 
 relevantColumns <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window', 'roll_belt', 'pitch_belt', 'yaw_belt', 'total_accel_belt', 'gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z', 'accel_belt_x', 'accel_belt_y', 'accel_belt_z', 'magnet_belt_x', 'magnet_belt_y', 'magnet_belt_z', 'magnet_dumbbell_x', 'magnet_dumbbell_y', 'magnet_dumbbell_z', 'roll_forearm', 'pitch_forearm', 'yaw_forearm', 'total_accel_forearm', 'gyros_forearm_x', 'gyros_forearm_y', 'gyros_forearm_z', 'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z', 'magnet_forearm_x', 'magnet_forearm_y', 'magnet_forearm_z', 'classe')
@@ -74,11 +79,15 @@ relevantColumns <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_times
 # remove timestamp and other meta columns
 relevantTrainingColumns <- relevantColumns[-c(1, 2, 3, 4, 5)]
 
+print.xtable(xtable(data.frame(Columns = relevantTrainingColumns)), type="html")
+
 base_training <- mutate(raw_training[, relevantTrainingColumns], classe = as.factor(classe))
 ```
 
+
+
 ```{r eval=TRUE, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-evaluate <- function(cross_validation, probs) {
+evaluate <- function(cross_validation, probs, title="Classe Classifier ROC Performance") {
   
   roc_a <- roc(predictor=probs$A, response=cross_validation$classe)
   roc_b <- roc(predictor=probs$B, response=cross_validation$classe)
@@ -98,18 +107,13 @@ evaluate <- function(cross_validation, probs) {
   g <- g + geom_line(data = roc_viz_d, aes(x = 1 - specificity, y = sensitivity, color="orange"))
   g <- g + geom_line(data = roc_viz_e, aes(x = 1 - specificity, y = sensitivity))
   g <- g + geom_line(data = baseline, aes(x = specificity, y = sensitivity), linetype="dotted")
-  g <- g + ggtitle("Classe Classifier ROC Performance")
+  g <- g + ggtitle(title)
   g <- g + theme(legend.position="none")
   g
 }
 
-require(compiler)
+
 multiClassSummary <- cmpfun(function (data, lev = NULL, model = NULL){
-  
-  #Load Libraries
-  require(Metrics)
-  require(caret)
-  
   #Check data
   if (!all(levels(data[, "pred"]) == levels(data[, "obs"]))) 
     stop("levels of observed and predicted data do not match")
@@ -188,7 +192,7 @@ tc <- trainControl(method="repeatedcv", number=5, repeats=1, classProbs=TRUE, su
 fit_rf1 <- train(classe ~ ., data = training1, trControl=tc, method="rf", metric="ROC")
 result_rf.1.probs <- predict(fit_rf1, newdata=cross_validation1, type="prob")
 result_rf.1.base <- predict(fit_rf1, newdata=cross_validation1, type="raw")
-g.rf.1 <- evaluate(cross_validation1, probs=result_rf.1.probs)
+g.rf.1 <- evaluate(cross_validation1, probs=result_rf.1.probs, title="ROC: 50% Training Data Strata")
 c.rf.1 <- confusionMatrix(result_rf.1.base, cross_validation1$classe)
 c.acc.1 <- c.rf.1$overall[[1]]
 ooe.1 <- tail(data.frame(fit_rf1$finalModel$err.rate), 1)$OOB
@@ -198,7 +202,7 @@ ooe.1 <- tail(data.frame(fit_rf1$finalModel$err.rate), 1)$OOB
 fit_rf2 <- train(classe ~ ., data = training2, trControl=tc, method="rf", metric="ROC")
 result_rf.2.probs <- predict(fit_rf2, newdata=cross_validation2, type="prob")
 result_rf.2.base <- predict(fit_rf2, newdata=cross_validation2, type="raw")
-g.rf.2 <- evaluate(cross_validation2, probs=result_rf.2.probs)
+g.rf.2 <- evaluate(cross_validation2, probs=result_rf.2.probs, title="ROC: 75% Training Data Strata")
 c.rf.2 <- confusionMatrix(result_rf.2.base, cross_validation2$classe)
 c.acc.2 <- c.rf.2$overall[[1]]
 ooe.2 <- tail(data.frame(fit_rf2$finalModel$err.rate), 1)$OOB
@@ -208,7 +212,7 @@ ooe.2 <- tail(data.frame(fit_rf2$finalModel$err.rate), 1)$OOB
 fit_rf3 <- train(classe ~ ., data = training3, trControl=tc, method="rf", metric="ROC")
 result_rf.3.probs <- predict(fit_rf3, newdata=cross_validation3, type="prob")
 result_rf.3.base <- predict(fit_rf3, newdata=cross_validation3, type="raw")
-g.rf.3 <- evaluate(cross_validation3, probs=result_rf.3.probs)
+g.rf.3 <- evaluate(cross_validation3, probs=result_rf.3.probs, title="ROC: 87.5% Training Data Strata")
 c.rf.3 <- confusionMatrix(result_rf.3.base, cross_validation3$classe)
 c.acc.3 <- c.rf.3$overall[[1]]
 ooe.3 <- tail(data.frame(fit_rf3$finalModel$err.rate), 1)$OOB
@@ -218,23 +222,37 @@ ooe.3 <- tail(data.frame(fit_rf3$finalModel$err.rate), 1)$OOB
 fit_rf4 <- train(classe ~ ., data = training4, trControl=tc, method="rf", metric="ROC")
 result_rf.4.probs <- predict(fit_rf4, newdata=cross_validation4, type="prob")
 result_rf.4.base <- predict(fit_rf4, newdata=cross_validation4, type="raw")
-g.rf.4 <- evaluate(cross_validation4, probs=result_rf.4.probs)
+g.rf.4 <- evaluate(cross_validation4, probs=result_rf.4.probs, title="ROC: 93.75% Training Data Strata")
 c.rf.4 <- confusionMatrix(result_rf.4.base, cross_validation4$classe)
 c.acc.4 <- c.rf.4$overall[[1]]
 ooe.4 <- tail(data.frame(fit_rf4$finalModel$err.rate), 1)$OOB
 ```
 
-```{r eval=F, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+```{r eval=F, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 grid.arrange(g.rf.1, ncol=2, nrow=2)
 ```
 
-```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
-grid.arrange(g.rf.1, g.rf.2, g.rf.3, g.rf.4, ncol=2, nrow=2)
+# Receiver Output Charateristic
 
-bwplot(resamples(list(RF1 = fit_rf1, RF2 = fit_rf2, RF3 = fit_rf3, RF4 = fit_rf4)), metric=c("ROC", "Specificity", "Sensitivity"))
+Below is the ROC output plots for each of the attempted training data strata
+
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+grid.arrange(g.rf.1, g.rf.2, g.rf.3, g.rf.4, ncol=2, nrow=2)
 ```
 
-```{r eval=T, echo=TRUE, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+# Box and whisker plots
+
+The below box and whisker plots showing ROC, Specificity and Sensitivity respectively
+
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
+bwplot(resamples(list(RF1_50 = fit_rf1, RF2_75 = fit_rf2, RF3_875 = fit_rf3, RF4_9375 = fit_rf4)), metric=c("ROC", "Specificity", "Sensitivity"))
+```
+
+# Performance Summaries
+
+Below is a summary of the performance characteristics of each trained model
+
+```{r eval=T, echo=F, results='asis', message=FALSE, error=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(blank=FALSE, width.cutoff=60)}
 strata <- c(1/2, 3/4, 7/8, 15/16)
 folds <- c(5, 5, 5, 5)
 repeats <- c(1, 1, 1, 1)
